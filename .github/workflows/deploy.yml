@@ -22,16 +22,22 @@ jobs:
       - name: Build Hugo site
         run: hugo --minify
 
+      # === 修改后的部署步骤 ===
       - name: Deploy to server
-        id: deploy
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
-          script: |
-            rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" public/ /data/blog
+          # ===== 新增的参数 =====
+          source: "public" # 指定本地（GitHub Actions）的源目录
+          target: "/data/blog" # 指定服务器上的目标目录
+          strip_components: 1 # 这个很重要，它会去掉 'public' 这一层目录
+          # script 部分现在可以为空，或者用来执行其他服务器命令
+          # script: |
+          #   echo "Deployment from rsync finished."
 
+      # === 成功通知 ===
       - name: Send success notification
         if: success()
         run: |
@@ -40,13 +46,14 @@ jobs:
             -d '{
               "token": "${{ secrets.PUSHOVER_API_TOKEN }}",
               "user": "${{ secrets.PUSHOVER_USER_KEY }}",
-              "title": "blog deploy success 🎉",
-              "message": "success for deploy blog to server",
+              "title": "博客部署成功 🎉",
+              "message": "你的 Hugo 博客已成功更新并部署到服务器。",
               "priority": 0,
               "sound": "pushover"
             }' \
             https://api.pushover.net/1/messages.json
 
+      # === 失败通知 ===
       - name: Send failure notification
         if: failure()
         run: |
@@ -55,11 +62,11 @@ jobs:
             -d '{
               "token": "${{ secrets.PUSHOVER_API_TOKEN }}",
               "user": "${{ secrets.PUSHOVER_USER_KEY }}",
-              "title": "blog deploy failure ❌",
-              "message": "failure for deploy blog to server, check GitHub Actions log",
+              "title": "博客部署失败 ❌",
+              "message": "部署过程中出现错误，请检查 GitHub Actions 日志。",
               "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-              "url_title": "check detail log",
+              "url_title": "查看详细日志",
               "priority": 1,
               "sound": "siren"
             }' \
-            https://api.pushover.net/1/messages.json<D-b>
+            https://api.pushover.net/1/messages.json
