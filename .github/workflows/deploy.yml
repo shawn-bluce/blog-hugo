@@ -1,0 +1,65 @@
+# .github/workflows/deploy.yml
+name: Deploy Hugo Site
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v2
+        with:
+          hugo-version: 'latest'
+          extended: true
+
+      - name: Build Hugo site
+        run: hugo --minify
+
+      - name: Deploy to server
+        id: deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            rsync -avz --delete -e "ssh -o StrictHostKeyChecking=no" public/ /data/blog
+
+      - name: Send success notification
+        if: success()
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d '{
+              "token": "${{ secrets.PUSHOVER_API_TOKEN }}",
+              "user": "${{ secrets.PUSHOVER_USER_KEY }}",
+              "title": "blog deploy success 🎉",
+              "message": "success for deploy blog to server",
+              "priority": 0,
+              "sound": "pushover"
+            }' \
+            https://api.pushover.net/1/messages.json
+
+      - name: Send failure notification
+        if: failure()
+        run: |
+          curl -X POST \
+            -H "Content-Type: application/json" \
+            -d '{
+              "token": "${{ secrets.PUSHOVER_API_TOKEN }}",
+              "user": "${{ secrets.PUSHOVER_USER_KEY }}",
+              "title": "blog deploy failure ❌",
+              "message": "failure for deploy blog to server, check GitHub Actions log",
+              "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+              "url_title": "check detail log",
+              "priority": 1,
+              "sound": "siren"
+            }' \
+            https://api.pushover.net/1/messages.json<D-b>
